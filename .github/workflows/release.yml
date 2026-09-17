@@ -15,7 +15,7 @@ permissions:
 jobs:
   release:
     name: Build and publish release
-    runs-on: macos-14
+    runs-on: macos-15
 
     # Signing and notarization are driven entirely by these secrets. When they
     # are absent the build is ad-hoc signed and notarization is skipped, so the
@@ -36,6 +36,17 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4.2.2
+
+      - name: Select toolchain
+        # swift-testing requires Xcode 16 or newer. Pick the newest Xcode the
+        # runner image provides rather than pinning a version that image
+        # updates will eventually remove.
+        run: |
+          newest="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -n "${newest}" ]; then
+            echo "Selecting ${newest}"
+            sudo xcode-select -s "${newest}/Contents/Developer"
+          fi
 
       - name: Resolve version
         id: version

@@ -24,4 +24,16 @@ fi
 
 # ${a[@]+"${a[@]}"} keeps an empty array from tripping `set -u` on bash 3.2,
 # which is what macOS ships.
-swift test ${extra_flags[@]+"${extra_flags[@]}"} "$@"
+if ! swift test ${extra_flags[@]+"${extra_flags[@]}"} "$@"; then
+  status=$?
+  cat >&2 <<'HINT'
+
+If the failure is "no such module 'Testing'", the selected toolchain predates
+swift-testing. Select Xcode 16 or newer:
+
+  sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+Building the app itself does not require this; only the tests do.
+HINT
+  exit "${status}"
+fi

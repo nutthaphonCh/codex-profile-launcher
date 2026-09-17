@@ -133,6 +133,8 @@ Requirements:
 
 - macOS 13 or newer to build (the built app runs on macOS 12+)
 - Swift 5.9+ — Xcode 15+, or Command Line Tools (`xcode-select --install`)
+- Running the tests additionally needs swift-testing, which means Xcode 16+ or
+  a recent Command Line Tools release. Building the app has no such requirement.
 - Apple Silicon or Intel; the build produces a universal binary
 
 ```bash
