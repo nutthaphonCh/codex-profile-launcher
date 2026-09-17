@@ -1,0 +1,132 @@
+import AppKit
+import CodexProfileLauncherCore
+import Foundation
+
+let launcherVersion = "0.1.0"
+
+/// Shows a native alert. Errors must be understandable without a Terminal.
+func presentAlert(title: String, message: String, style: NSAlert.Style = .critical) {
+    let application = NSApplication.shared
+    application.setActivationPolicy(.regular)
+    application.activate(ignoringOtherApps: true)
+
+    let alert = NSAlert()
+    alert.alertStyle = style
+    alert.messageText = title
+    alert.informativeText = message
+    alert.addButton(withTitle: "OK")
+    alert.runModal()
+}
+
+func fail(_ error: LauncherError) -> Never {
+    FileHandle.standardError.write(Data("\(error.title)\n\(error.message)\n".utf8))
+    if isatty(STDERR_FILENO) == 0 {
+        presentAlert(title: error.title, message: error.message)
+    }
+    exit(1)
+}
+
+/// Resolves the profile for this launcher.
+///
+/// `CODEX_PROFILE_LAUNCHER_PROFILE_FILE` exists so the binary can be exercised
+/// straight out of `swift build`, without an app bundle, during verification.
+func loadProfile() throws -> Profile {
+    let environment = ProcessInfo.processInfo.environment
+    if let override = environment["CODEX_PROFILE_LAUNCHER_PROFILE_FILE"],
+       !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let path = PathResolver.expand(override, homeDirectory: NSHomeDirectory())
+        return try Profile.load(contentsOf: URL(fileURLWithPath: path))
+    }
+
+    guard let bundled = Bundle.main.url(forResource: "profile", withExtension: "json") else {
+        throw LauncherError.profileMissing
+    }
+    return try Profile.load(contentsOf: bundled)
+}
+
+func run() {
+    let arguments = Array(CommandLine.arguments.dropFirst())
+
+    if arguments.contains("--version") {
+        print("CodexProfileLauncher \(launcherVersion)")
+        exit(0)
+    }
+    if arguments.contains("--help") || arguments.contains("-h") {
+        print("""
+        CodexProfileLauncher \(launcherVersion)
+
+        Launches your existing Codex Desktop installation with an isolated
+        profile. Normally there is nothing to run by hand — open the generated
+        application instead.
+
+          --print-plan   Resolve everything and print what would be launched,
+                         then exit without starting Codex.
+          --version      Print the launcher version.
+          --help         Show this message.
+        """)
+        exit(0)
+    }
+
+    let environment = ProcessInfo.processInfo.environment
+    let home = NSHomeDirectory()
+
+    let profile: Profile
+    do {
+        profile = try loadProfile()
+    } catch let error as LauncherError {
+        fail(error)
+    } catch {
+        fail(.profileInvalid(reason: error.localizedDescription))
+    }
+
+    let locator = CodexAppLocator(
+        launchServicesLookup: { identifiers in
+            // A lookup only. Codex is always started as a direct child process.
+            for identifier in identifiers {
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) {
+                    return url.path
+                }
+            }
+            return nil
+        }
+    )
+
+    do {
+        try LaunchPlanBuilder.validate(profile: profile, homeDirectory: home)
+        let codexApp = try locator.locate(profile: profile, environment: environment, homeDirectory: home)
+        let plan = try LaunchPlanBuilder.make(
+            profile: profile,
+            codexApp: codexApp,
+            baseEnvironment: environment,
+            homeDirectory: home
+        )
+
+        if arguments.contains("--print-plan") {
+            var described = plan.describedForDiagnostics
+            described["profile"] = profile.name
+            described["codexBundle"] = codexApp.bundlePath
+            described["codexBundleIdentifier"] = codexApp.bundleIdentifier ?? "(none)"
+            described["codexVersion"] = codexApp.shortVersion ?? "(unknown)"
+            let data = try JSONSerialization.data(
+                withJSONObject: described,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            print(String(decoding: data, as: UTF8.self))
+            exit(0)
+        }
+
+        let launcher = ProfileLauncher()
+        try launcher.prepareDirectories(plan)
+        let process = try launcher.launch(plan)
+        try launcher.checkForEarlyFailure(process, executablePath: plan.executablePath)
+    } catch let error as LauncherError {
+        fail(error)
+    } catch {
+        fail(.launchFailed(executable: "Codex", underlying: error.localizedDescription))
+    }
+
+    // Codex is running as an independent process; this shim has no further work.
+    exit(0)
+}
+
+run()
