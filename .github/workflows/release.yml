@@ -29,7 +29,6 @@ jobs:
       MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       CODESIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-      CODESIGN_KEYCHAIN: ${{ runner.temp }}/codex-profile-launcher-signing.keychain-db
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}

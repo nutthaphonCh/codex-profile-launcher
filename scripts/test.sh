@@ -22,4 +22,6 @@ if [[ ! -d "$(xcode-select -p 2>/dev/null)/Platforms" && -d "${CLT_FRAMEWORKS}" 
   )
 fi
 
-swift test "${extra_flags[@]}" "$@"
+# ${a[@]+"${a[@]}"} keeps an empty array from tripping `set -u` on bash 3.2,
+# which is what macOS ships.
+swift test ${extra_flags[@]+"${extra_flags[@]}"} "$@"

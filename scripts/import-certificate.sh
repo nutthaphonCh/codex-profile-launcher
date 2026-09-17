@@ -37,5 +37,11 @@ security set-key-partition-list \
 
 security list-keychain -d user -s "${KEYCHAIN_PATH}" login.keychain-db
 
+# Tell later steps which keychain holds the identity. The `runner` context is
+# not available in job-level env, so the path is published from here.
+if [[ -n "${GITHUB_ENV:-}" ]]; then
+  echo "CODESIGN_KEYCHAIN=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
+fi
+
 echo "==> Imported signing identities:"
 security find-identity -v -p codesigning "${KEYCHAIN_PATH}"
