@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here needs write access to the repository.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: macos-14
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4.2.2
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Run unit tests
+        run: ./scripts/test.sh
+
+      - name: Build app bundle
+        run: ./scripts/build.sh
+
+      - name: Validate app bundle
+        run: ./scripts/validate-bundle.sh "dist/Codex Personal.app"
+
+      - name: Verify universal binary
+        run: |
+          archs="$(lipo -archs "dist/Codex Personal.app/Contents/MacOS/CodexProfileLauncher")"
+          echo "Architectures: ${archs}"
+          for expected in arm64 x86_64; do
+            case " ${archs} " in
+              *" ${expected} "*) ;;
+              *) echo "::error::missing ${expected} slice"; exit 1 ;;
+            esac
+          done
+
+      - name: Build every other profile
+        # Profiles are configuration, so every shipped one must still build.
+        run: |
+          for profile in profiles/*.json; do
+            slug="$(basename "${profile}" .json)"
+            [ "${slug}" = "personal" ] && continue
+            ./scripts/build.sh --profile "${slug}" --output dist-check
+          done
+
+      - name: Package artifacts
+        run: ./scripts/package.sh --skip-build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: codex-profile-launcher-ci
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          retention-days: 7

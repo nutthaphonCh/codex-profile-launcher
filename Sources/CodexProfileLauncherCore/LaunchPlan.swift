@@ -41,6 +41,7 @@ public enum LaunchPlanBuilder {
     static let launcherOwnedEnvironmentKeys = [
         CodexAppLocator.overrideEnvironmentKey,
         "CODEX_PROFILE_LAUNCHER_PROFILE_FILE",
+        "CODEX_PROFILE_LAUNCHER_NO_ALERTS",
     ]
 
     public static func validate(profile: Profile, homeDirectory: String) throws {

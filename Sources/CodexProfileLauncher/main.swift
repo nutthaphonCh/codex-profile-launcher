@@ -2,7 +2,10 @@ import AppKit
 import CodexProfileLauncherCore
 import Foundation
 
-let launcherVersion = "0.1.0"
+/// Read from the generated bundle so there is one source of truth for the
+/// version: the VERSION file, via scripts/build.sh.
+let launcherVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    ?? "0.0.0-unbundled"
 
 /// Shows a native alert. Errors must be understandable without a Terminal.
 func presentAlert(title: String, message: String, style: NSAlert.Style = .critical) {
@@ -18,9 +21,22 @@ func presentAlert(title: String, message: String, style: NSAlert.Style = .critic
     alert.runModal()
 }
 
+/// Suppresses the GUI alert. Set by CI and useful over SSH, where a modal
+/// alert would block forever with nobody to dismiss it.
+let alertsDisabledEnvironmentKey = "CODEX_PROFILE_LAUNCHER_NO_ALERTS"
+
+func alertsAreAvailable() -> Bool {
+    let environment = ProcessInfo.processInfo.environment
+    if let disabled = environment[alertsDisabledEnvironmentKey], !disabled.isEmpty {
+        return false
+    }
+    // Run from a terminal, the message on stderr is the better channel.
+    return isatty(STDERR_FILENO) == 0
+}
+
 func fail(_ error: LauncherError) -> Never {
     FileHandle.standardError.write(Data("\(error.title)\n\(error.message)\n".utf8))
-    if isatty(STDERR_FILENO) == 0 {
+    if alertsAreAvailable() {
         presentAlert(title: error.title, message: error.message)
     }
     exit(1)

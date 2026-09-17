@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, without the leading v (e.g. 0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: macos-14
+
+    # Signing and notarization are driven entirely by these secrets. When they
+    # are absent the build is ad-hoc signed and notarization is skipped, so the
+    # workflow works unchanged with or without an Apple Developer account.
+    #
+    #   MACOS_CERTIFICATE_P12       base64 of a Developer ID Application .p12
+    #   MACOS_CERTIFICATE_PASSWORD  password for that .p12
+    #   MACOS_SIGNING_IDENTITY      "Developer ID Application: Name (TEAMID)"
+    #   APPLE_ID / APPLE_TEAM_ID / APPLE_APP_PASSWORD   notarization credentials
+    env:
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      CODESIGN_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      CODESIGN_KEYCHAIN: ${{ runner.temp }}/codex-profile-launcher-signing.keychain-db
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4.2.2
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${{ github.event.inputs.version }}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Building version ${version}"
+
+      - name: Check VERSION file matches the release
+        run: |
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${file_version}" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::VERSION file says ${file_version} but the release is ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: ./scripts/test.sh
+
+      - name: Import signing certificate
+        # Job-level env is what step `if` conditions can see.
+        if: env.MACOS_CERTIFICATE_P12 != ''
+        run: ./scripts/import-certificate.sh
+
+      - name: Build and package
+        run: |
+          ./scripts/build.sh --version "${{ steps.version.outputs.version }}"
+          ./scripts/validate-bundle.sh "dist/Codex Personal.app"
+          ./scripts/package.sh --skip-build --version "${{ steps.version.outputs.version }}"
+
+      - name: Notarize and staple
+        # Exits successfully without doing anything when credentials are absent.
+        run: ./scripts/notarize.sh "dist/Codex-Profile-Launcher-v${{ steps.version.outputs.version }}.dmg"
+
+      - name: Write checksums
+        # Written after notarization, which staples a ticket and changes the hash.
+        working-directory: dist
+        run: |
+          shasum -a 256 \
+            "Codex-Profile-Launcher-v${{ steps.version.outputs.version }}.dmg" \
+            "Codex-Profile-Launcher-v${{ steps.version.outputs.version }}.zip" \
+            > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Write release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -n "${CODESIGN_IDENTITY}" ]; then
+            signing="This build is signed with a Developer ID certificate."
+          else
+            signing="This build is ad-hoc signed. The first time you open it, macOS will warn that the developer cannot be verified: right-click **Codex Personal** in Applications, choose **Open**, then confirm."
+          fi
+
+          cat > release-notes.md <<NOTES
+          ## Install
+
+          1. Download \`Codex-Profile-Launcher-v${VERSION}.dmg\`
+          2. Open it and drag **Codex Personal** into **Applications**
+          3. Open **Codex Personal** and sign in with your second account
+
+          ${signing}
+
+          Codex Desktop must already be installed. This launcher does not
+          include, modify or redistribute Codex, and is not affiliated with
+          OpenAI.
+
+          Your second profile is stored in \`~/.codex-personal\`. Your normal
+          Codex installation and its \`~/.codex\` folder are left untouched.
+
+          ## Verify your download
+
+          \`\`\`
+          shasum -a 256 -c SHA256SUMS.txt
+          \`\`\`
+          NOTES
+
+          cat release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file release-notes.md \
+            "dist/Codex-Profile-Launcher-v${VERSION}.dmg" \
+            "dist/Codex-Profile-Launcher-v${VERSION}.zip" \
+            "dist/SHA256SUMS.txt"
