@@ -61,20 +61,21 @@ echo "==> Building ${APP_NAME} ${VERSION} (${ARCH}) from ${PROFILE_FILE}"
 # Compile
 # ---------------------------------------------------------------------------
 
+# Builds one architecture into its own scratch directory. The resulting binary
+# is always at <scratch>/release/CodexProfileLauncher.
 build_slice() {
   local arch="$1" scratch="$2"
   echo "==> Compiling ${arch}"
   swift build -c release --scratch-path "${scratch}" \
     -Xswiftc -target -Xswiftc "${arch}-apple-macosx${MACOS_MIN}" \
     -Xlinker -platform_version -Xlinker macos -Xlinker "${MACOS_MIN}" -Xlinker "${MACOS_MIN}"
-  echo "${scratch}/release/CodexProfileLauncher"
 }
 
 BUILD_DIR="${REPO_ROOT}/.build"
 case "${ARCH}" in
   universal)
-    build_slice arm64  "${BUILD_DIR}/arm64"  > /dev/null
-    build_slice x86_64 "${BUILD_DIR}/x86_64" > /dev/null
+    build_slice arm64  "${BUILD_DIR}/arm64"
+    build_slice x86_64 "${BUILD_DIR}/x86_64"
     BINARY="${BUILD_DIR}/universal/CodexProfileLauncher"
     mkdir -p "$(dirname "${BINARY}")"
     # `swift build --arch a --arch b` needs a full Xcode installation; lipo
@@ -85,7 +86,7 @@ case "${ARCH}" in
       -output "${BINARY}"
     ;;
   arm64|x86_64)
-    BINARY="$(build_slice "${ARCH}" "${BUILD_DIR}/${ARCH}" | tail -1)"
+    build_slice "${ARCH}" "${BUILD_DIR}/${ARCH}"
     BINARY="${BUILD_DIR}/${ARCH}/release/CodexProfileLauncher"
     ;;
   *)
