@@ -1,0 +1,13 @@
+{
+  "name": "Personal",
+  "slug": "personal",
+  "appName": "Codex Personal",
+  "bundleIdentifier": "com.local.codex-profile-launcher.personal",
+  "codexHome": "~/.codex-personal",
+  "electronUserDataPath": "~/.codex-personal/electron-user-data",
+  "icon": {
+    "label": "CP",
+    "tintTop": "#7C5CFF",
+    "tintBottom": "#2A1B6B"
+  }
+}

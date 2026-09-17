@@ -1,0 +1,13 @@
+{
+  "name": "Work",
+  "slug": "work",
+  "appName": "Codex Work",
+  "bundleIdentifier": "com.local.codex-profile-launcher.work",
+  "codexHome": "~/.codex-work",
+  "electronUserDataPath": "~/.codex-work/electron-user-data",
+  "icon": {
+    "label": "CW",
+    "tintTop": "#2FB3A5",
+    "tintBottom": "#0C3A36"
+  }
+}

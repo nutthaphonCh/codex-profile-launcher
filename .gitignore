@@ -1,0 +1,27 @@
+# Build outputs
+.build/
+build/
+dist/
+*.dmg
+*.zip
+*.icns
+*.iconset/
+DerivedData/
+
+# Signing material - never commit
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+notarization-*.json
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Editor
+.swiftpm/
+*.xcworkspace/
+xcuserdata/
